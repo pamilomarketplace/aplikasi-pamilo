@@ -1,0 +1,7 @@
+{
+  "deno.enable": false,
+  "deno.enablePaths": [
+    "supabase/functions"
+  ],
+  "js/ts.updateImportsOnFileMove.enabled": "always"
+}

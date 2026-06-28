@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "608335628888",
+    "project_id": "marketplace-pami",
+    "storage_bucket": "marketplace-pami.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608335628888:android:93eb33267444bf4f7ed82d",
+        "android_client_info": {
+          "package_name": "com.agieldoank85.pamilo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "608335628888-f1f1her3e67hmhk000hi2ito2bkb6ooe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDleAwiEEqVhs4KVih1U47ukK0nZEPZiXM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "608335628888-f1f1her3e67hmhk000hi2ito2bkb6ooe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608335628888:android:5948fbe64f1069927ed82d",
+        "android_client_info": {
+          "package_name": "com.pamilo.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "608335628888-f1f1her3e67hmhk000hi2ito2bkb6ooe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDleAwiEEqVhs4KVih1U47ukK0nZEPZiXM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "608335628888-f1f1her3e67hmhk000hi2ito2bkb6ooe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
