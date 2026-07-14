@@ -36,15 +36,16 @@ export default function RegisterSellerScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FAF6F0" />
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}><Text style={styles.headerTitle}>Pendaftaran Toko UMKM</Text></View>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}><Text style={styles.headerTitle}>Pendaftaran Mitra Toko</Text></View>
       
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.label}>Nama Toko / Lapak</Text>
+        <Text style={styles.label}>Nama Toko / Usaha</Text>
         <TextInput style={styles.input} placeholder="Contoh: Seblak Mang Ujang" value={namaToko} onChangeText={setNamaToko} />
 
-        <Text style={styles.label}>Kategori Jualan</Text>
+        <Text style={styles.label}>Kluster Kategori</Text>
         <View style={styles.kategoriRow}>
-          {['Makanan & Minuman', 'Sembako', 'Jasa', 'Lainnya'].map(kat => (
+          {/* PERUBAHAN: Hanya menampilkan 3 kategori utama PAMILO */}
+          {['Pamilo Food', 'Pamilo Mart', 'Pamilo Service'].map(kat => (
             <TouchableOpacity key={kat} style={[styles.katBtn, kategori === kat && styles.katBtnActive]} onPress={() => setKategori(kat)}>
               <Text style={[styles.katBtnText, kategori === kat && styles.katBtnTextActive]}>{kat}</Text>
             </TouchableOpacity>

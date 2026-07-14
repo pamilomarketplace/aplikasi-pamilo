@@ -1,5 +1,5 @@
 // app/checkout/index.tsx
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Image, TextInput, Modal, Dimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,12 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
 
 import { useCheckout, CheckoutItem } from '@/features/orders/useCheckout';
+import PromoCheckout from '@/components/PromoCheckout';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
-  // 🚀 RADAR PENGENDALI PETA
   const mapRef = useRef<MapView | null>(null);
   
   const params = useLocalSearchParams();
@@ -28,8 +28,33 @@ export default function CheckoutScreen() {
     isMapVisible, setIsMapVisible, bukaPeta, tempLat, tempLng, setTempLat, setTempLng,
     konfirmasiLokasiPeta, isTranslatingGps, latitude,
     searchQuery, setSearchQuery, searchResults, setSearchResults, isSearching, cariAlamatPeta, pilihHasilPencarian,
-    executeOrderCheckout
+    executeOrderCheckout, updateQuantity // 🚀 Import dari Hook
   } = useCheckout(mode, produk_id, qty);
+
+  const [diskonPromo, setDiskonPromo] = useState<number>(0);
+  const [dataPromoTerpakai, setDataPromoTerpakai] = useState<any>(null);
+
+  const finalTotalPembayaran = Math.max(0, totalPembayaran - diskonPromo);
+
+  const tangkapHasilPromo = (hasilPromo: any) => {
+      if (hasilPromo) {
+          setDiskonPromo(hasilPromo.nominal);
+          setDataPromoTerpakai(hasilPromo);
+      } else {
+          setDiskonPromo(0);
+          setDataPromoTerpakai(null);
+      }
+  };
+
+  // 🚀 FUNGSI BARU: UBAH KUANTITAS
+  const handleUbahKuantitas = (id: string, delta: number) => {
+      updateQuantity(id, delta);
+      // Demi keamanan matematika diskon, lepas promo jika warga mengubah jumlah pesanan
+      if (diskonPromo > 0) {
+          setDiskonPromo(0);
+          setDataPromoTerpakai(null);
+      }
+  };
 
   const formatRupiah = (angka: number) => `Rp ${Number(angka).toLocaleString('id-ID')}`;
 
@@ -40,9 +65,22 @@ export default function CheckoutScreen() {
       </View>
       <View style={styles.productInfoCol}>
         <Text style={styles.productNameText} numberOfLines={2}>{item.nama_produk}</Text>
-        <Text style={styles.qtyPriceText}>{item.kuantitas} x {formatRupiah(item.harga)}</Text>
+        <Text style={styles.qtyPriceText}>{formatRupiah(item.harga)}</Text>
       </View>
-      <Text style={styles.subtotalItemText}>{formatRupiah(item.harga * item.kuantitas)}</Text>
+      
+      {/* 🚀 STEPPER TAMBAH KURANG KUANTITAS DISINI */}
+      <View style={styles.rightActionCol}>
+        <Text style={styles.subtotalItemText}>{formatRupiah(item.harga * item.kuantitas)}</Text>
+        <View style={styles.stepperBox}>
+            <TouchableOpacity onPress={() => handleUbahKuantitas(item.id, -1)} style={styles.stepBtn}>
+                <Ionicons name="remove" size={14} color="#E28743" />
+            </TouchableOpacity>
+            <Text style={styles.stepVal}>{item.kuantitas}</Text>
+            <TouchableOpacity onPress={() => handleUbahKuantitas(item.id, 1)} style={styles.stepBtn}>
+                <Ionicons name="add" size={14} color="#E28743" />
+            </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 
@@ -125,23 +163,49 @@ export default function CheckoutScreen() {
           </>
         }
         ListFooterComponent={
-          <View style={[styles.sectionWrapperBlock, { marginTop: 16 }]}>
-            <Text style={styles.notaHeadingText}>Rincian Nota Finansial</Text>
-            <View style={styles.notaRowLine}><Text style={styles.notaLabelText}>Subtotal Belanja</Text><Text style={styles.notaValueText}>{formatRupiah(subtotalHarga)}</Text></View>
-            <View style={styles.notaRowLine}><Text style={styles.notaLabelText}>Ongkos Kirim ({jarakKm} Km)</Text><Text style={styles.notaValueText}>{formatRupiah(ongkosKirim)}</Text></View>
-            <View style={styles.notaRowLine}><Text style={styles.notaLabelText}>Biaya Layanan</Text><Text style={styles.notaValueText}>{formatRupiah(biayaLayanan)}</Text></View>
-            <View style={styles.dividerLine} />
-            <View style={styles.notaRowLine}><Text style={styles.totalLabelText}>Total Bayar</Text><Text style={styles.totalValueText}>{formatRupiah(totalPembayaran)}</Text></View>
-          </View>
+          <>
+            <View style={{ marginTop: 16 }}>
+              {/* 🚀 KEY AUTO-RESET: Komponen Promo akan di-reset otomatis oleh React jika Total Harga Berubah */}
+              <PromoCheckout 
+                 key={subtotalHarga.toString()}
+                 totalBelanja={totalPembayaran} 
+                 userIdPembeli="" 
+                 idToko={checkoutItems.length > 0 ? ((checkoutItems[0] as any).id_toko || (checkoutItems[0] as any).toko_id) : null} 
+                 layananSaatIni="PAMILO_FOOD" 
+                 onPromoValid={tangkapHasilPromo}
+              />
+            </View>
+
+            <View style={[styles.sectionWrapperBlock, { marginTop: 8 }]}>
+              <Text style={styles.notaHeadingText}>Rincian Nota Finansial</Text>
+              <View style={styles.notaRowLine}><Text style={styles.notaLabelText}>Subtotal Belanja</Text><Text style={styles.notaValueText}>{formatRupiah(subtotalHarga)}</Text></View>
+              <View style={styles.notaRowLine}><Text style={styles.notaLabelText}>Ongkos Kirim ({jarakKm} Km)</Text><Text style={styles.notaValueText}>{formatRupiah(ongkosKirim)}</Text></View>
+              <View style={styles.notaRowLine}><Text style={styles.notaLabelText}>Biaya Layanan</Text><Text style={styles.notaValueText}>{formatRupiah(biayaLayanan)}</Text></View>
+              
+              {diskonPromo > 0 && (
+                <View style={styles.notaRowLine}>
+                  <Text style={[styles.notaLabelText, {color: '#27AE60'}]}><Ionicons name="pricetag" size={12}/> Diskon Voucher</Text>
+                  <Text style={[styles.notaValueText, {color: '#27AE60'}]}>- {formatRupiah(diskonPromo)}</Text>
+                </View>
+              )}
+
+              <View style={styles.dividerLine} />
+              <View style={styles.notaRowLine}><Text style={styles.totalLabelText}>Total Bayar</Text><Text style={styles.totalValueText}>{formatRupiah(finalTotalPembayaran)}</Text></View>
+            </View>
+          </>
         }
       />
 
       <View style={styles.stickyFooterBar}>
         <View style={styles.footerPriceCol}>
           <Text style={styles.footerLabelTotal}>Total Bayar</Text>
-          <Text style={styles.footerValueTotal}>{formatRupiah(totalPembayaran)}</Text>
+          <Text style={styles.footerValueTotal}>{formatRupiah(finalTotalPembayaran)}</Text>
         </View>
-        <TouchableOpacity style={[styles.btnExecutePayment, submitting && styles.btnExecuteDisabled]} onPress={executeOrderCheckout} disabled={submitting}>
+        <TouchableOpacity 
+           style={[styles.btnExecutePayment, submitting && styles.btnExecuteDisabled]} 
+           onPress={() => (executeOrderCheckout as any)(dataPromoTerpakai, finalTotalPembayaran)} 
+           disabled={submitting}
+        >
           {submitting ? <ActivityIndicator size="small" color="#FFF" /> : <><Text style={styles.textBtnPayment}>Bayar Sekarang</Text><Ionicons name="checkmark-circle" size={18} color="#FFF" /></>}
         </TouchableOpacity>
       </View>
@@ -149,10 +213,10 @@ export default function CheckoutScreen() {
       <Modal visible={isMapVisible} animationType="slide" transparent={false}>
         <View style={styles.mapContainer}>
           <MapView 
-            ref={mapRef} // 🚀 PENGENDALI PETA DIPASANG DI SINI
+            ref={mapRef} 
             style={styles.mapView}
             provider={PROVIDER_DEFAULT}
-            initialRegion={{ latitude: tempLat, longitude: tempLng, latitudeDelta: 0.005, longitudeDelta: 0.005 }} // Gunakan initialRegion agar tidak konflik dengan animasi
+            initialRegion={{ latitude: tempLat, longitude: tempLng, latitudeDelta: 0.005, longitudeDelta: 0.005 }}
             onRegionChangeComplete={(region) => {
               setTempLat(region.latitude);
               setTempLng(region.longitude);
@@ -173,9 +237,9 @@ export default function CheckoutScreen() {
                   placeholder="Ketik alamat, lalu klik Cari/Enter 🔍"
                   placeholderTextColor="#A1887F"
                   value={searchQuery}
-                  onChangeText={setSearchQuery} // 🚀 Hanya menyimpan teks ke state
-                  onSubmitEditing={() => cariAlamatPeta(searchQuery)} // 🚀 Menembak API hanya saat tombol Enter di keyboard ditekan
-                  returnKeyType="search" // Mengubah tombol enter keyboard menjadi ikon kaca pembesar/Cari
+                  onChangeText={setSearchQuery} 
+                  onSubmitEditing={() => cariAlamatPeta(searchQuery)} 
+                  returnKeyType="search"
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity style={styles.clearSearchBtn} onPress={() => { setSearchQuery(''); setSearchResults([]); }}>
@@ -194,13 +258,12 @@ export default function CheckoutScreen() {
                     style={styles.searchResultItem} 
                     onPress={() => {
                       pilihHasilPencarian(res.lat, res.lon);
-                      // 🚀 TERBANGKAN PETA KE TITIK HASIL PENCARIAN
                       mapRef.current?.animateToRegion({
                         latitude: Number(res.lat),
                         longitude: Number(res.lon),
                         latitudeDelta: 0.005,
                         longitudeDelta: 0.005
-                      }, 1000); // Durasi terbang 1 detik
+                      }, 1000);
                     }}
                   >
                     <Ionicons name="location-outline" size={18} color="#7A6450" />
@@ -275,7 +338,13 @@ const styles = StyleSheet.create({
   productInfoCol: { flex: 1, marginLeft: 12, gap: 2 },
   productNameText: { fontSize: 13, fontWeight: 'bold', color: '#4A3420', lineHeight: 18 },
   qtyPriceText: { fontSize: 12, color: '#A1887F' },
+  
+  // 🚀 STYLING BARU UNTUK STEPPER KUANTITAS
+  rightActionCol: { alignItems: 'flex-end', gap: 6 },
   subtotalItemText: { fontSize: 13, fontWeight: 'bold', color: '#4A3420' },
+  stepperBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3E0', borderRadius: 6, borderWidth: 1, borderColor: '#FFE0B2' },
+  stepBtn: { padding: 4, paddingHorizontal: 8 },
+  stepVal: { fontSize: 12, fontWeight: 'bold', color: '#E65100', minWidth: 20, textAlign: 'center' },
   
   notaHeadingText: { fontSize: 14, fontWeight: 'bold', color: '#4A3420', marginBottom: 14 },
   notaRowLine: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },

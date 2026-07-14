@@ -12,7 +12,7 @@ export interface CheckoutItem {
   harga: number;
   kuantitas: number;
   foto_produk: string | null;
-  id_toko?: string;
+  id_toko?: string; 
 }
 
 export const useCheckout = (mode: string | null, produkIdLangsung: string | null, qtyLangsung: number = 1) => {
@@ -24,7 +24,6 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
   const [checkoutItems, setCheckoutItems] = useState<CheckoutItem[]>([]);
   const [subtotalHarga, setSubtotalHarga] = useState<number>(0);
   
-  // KOORDINAT TOKO ASLI (Titik Awal Hitungan Kurir)
   const [tokoLat, setTokoLat] = useState<number>(-7.3274); 
   const [tokoLng, setTokoLng] = useState<number>(108.3532);
 
@@ -52,31 +51,22 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
   const ongkosKirim = jarakKm * tarifOngkirPerKm;
   const totalPembayaran = subtotalHarga + ongkosKirim + biayaLayanan;
 
-  // 🚀 FUNGSI PENCARI KOORDINAT TOKO
   const fetchKoordinatToko = async (idToko: string) => {
     try {
-      console.log(`[Checkout 📡] Menganalisis Titik Jemput untuk Toko ID: ${idToko}`);
-      
       const { data, error } = await supabase
         .from('toko')
         .select('latitude_toko, longitude_toko')
         .eq('id_toko', idToko)
         .single();
       
-      if (error) {
-        console.error('[Checkout ❌] Gagal menarik koordinat toko dari database:', error.message);
-        return;
-      }
+      if (error) return;
 
       if (data?.latitude_toko && data?.longitude_toko) {
-        console.log(`[Checkout ✅] Koordinat Toko Terkunci di: ${data.latitude_toko}, ${data.longitude_toko}`);
         setTokoLat(Number(data.latitude_toko));
         setTokoLng(Number(data.longitude_toko));
-      } else {
-        console.warn('[Checkout ⚠️] Pemilik toko ini belum mengatur kordinat GPS di dasbor mereka!');
       }
     } catch (err) {
-      console.error('[Checkout ❌] Terjadi kesalahan fatal pada mesin GPS toko:', err);
+      console.error('[Checkout ❌]', err);
     }
   };
 
@@ -103,7 +93,6 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
         const { data, error } = await supabase.from('produk').select('*').eq('id_produk', produkIdLangsung).single();
         if (error) throw error;
         
-        // Menggunakan id_toko_produk sesuai DDL
         const targetIdToko = data.id_toko_produk; 
 
         setCheckoutItems([{
@@ -113,9 +102,7 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
         }]);
         setSubtotalHarga(data.harga_produk * Number(qtyLangsung));
 
-        if (targetIdToko) {
-          await fetchKoordinatToko(targetIdToko);
-        }
+        if (targetIdToko) await fetchKoordinatToko(targetIdToko);
 
       } else {
         const { data, error } = await supabase.from('keranjang').select('*, produk(*)').eq('pembeli_id', userId);
@@ -155,6 +142,33 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
       }
     });
   }, [prepareCheckoutData]);
+
+  // 🚀 FUNGSI BARU: UPDATE JUMLAH BARANG DI KERANJANG/CHECKOUT
+  const updateQuantity = useCallback((id: string, delta: number) => {
+    setCheckoutItems(prev => {
+      const newItems = [...prev];
+      const itemIndex = newItems.findIndex(i => i.id === id);
+      
+      if (itemIndex > -1) {
+        const currentQty = newItems[itemIndex].kuantitas;
+        const newQty = Math.max(1, currentQty + delta); // Minimal 1, tidak boleh minus
+        
+        if (newQty !== currentQty) {
+          newItems[itemIndex] = { ...newItems[itemIndex], kuantitas: newQty };
+          
+          // Kalkulasi ulang subtotal
+          const newSubtotal = newItems.reduce((acc, curr) => acc + (curr.harga * curr.kuantitas), 0);
+          setSubtotalHarga(newSubtotal);
+
+          // Update otomatis ke database keranjang (jika bukan beli langsung) agar tersimpan
+          if (mode !== 'beli_langsung') {
+            supabase.from('keranjang').update({ kuantitas: newQty }).eq('id', id).then();
+          }
+        }
+      }
+      return newItems;
+    });
+  }, [mode]);
 
   const bukaPeta = async () => {
     setIsMapVisible(true); 
@@ -206,7 +220,6 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
         teksAlamat = bagianAlamat.filter(Boolean).join(', ');
       }
 
-      console.log(`[Hitung Rute 🛣️] Dari TOKO: ${tokoLat}, ${tokoLng} | Menuju PEMBELI: ${tempLat}, ${tempLng}`);
       const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${tokoLng},${tokoLat};${tempLng},${tempLat}?overview=false`;
       
       const routeResponse = await fetch(osrmUrl, { headers: { 'User-Agent': 'PamiloApp/1.0' } });
@@ -218,9 +231,6 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
         const jarakMeter = routeData.routes[0].distance; 
         const jarakHasilKm = jarakMeter / 1000; 
         jarakFinalized = jarakHasilKm < 1 ? 1 : Number(jarakHasilKm.toFixed(1));
-        console.log(`[Hitung Rute ✅] OSRM Sukses. Jarak aktual: ${jarakFinalized} KM`);
-      } else {
-        console.log('[Hitung Rute ⚠️] OSRM gagal menghitung rute, batas minimal 1 Km diterapkan.');
       }
 
       setJarakKm(jarakFinalized);
@@ -229,22 +239,20 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
       setAlamatInput(teksAlamat || 'Lokasi Peta Terpilih');
       setIsMapVisible(false); 
     } catch (error) {
-      console.error('Gagal kalkulasi rute:', error);
       Alert.alert('Terjadi Kesalahan', 'Gagal memproses hitungan rute jalan.');
     } finally {
       setIsTranslatingGps(false);
     }
   };
 
-  const executeOrderCheckout = async () => {
+  const executeOrderCheckout = async (dataPromoTerpakai: any = null, finalTotalBayar: number = totalPembayaran) => {
     if (!currentUserId || checkoutItems.length === 0) return;
     if (!latitude || !longitude || !alamatInput.trim()) {
       Alert.alert('Alamat Kosong', 'Mohon ketuk kolom "Lokasi Tujuan Pengantaran" untuk menentukan titik rumah Anda di Peta.');
       return;
     }
     
-    // Validasi pencegahan di awal (Uang kurang tidak boleh pesan)
-    if (metodePembayaran === 'SALDO' && userSaldo < totalPembayaran) {
+    if (metodePembayaran === 'SALDO' && userSaldo < finalTotalBayar) {
       Alert.alert('Saldo Tidak Cukup', 'Saldo Dompet PAMILO Anda tidak mencukupi untuk melakukan transaksi ini.');
       return;
     }
@@ -254,6 +262,7 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
       const idTokoTransaksi = checkoutItems[0].id_toko || null;
       const metodePembayaranDB = metodePembayaran === 'SALDO' ? 'SALDO_PAMILO' : 'TUNAI';
 
+      // 1. BUAT PESANAN
       const { data: orderData, error: orderError } = await supabase
         .from('pesanan')
         .insert({
@@ -261,12 +270,11 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
           id_toko: idTokoTransaksi, 
           subtotal_produk: subtotalHarga, 
           ongkos_kirim: ongkosKirim,
-          total_pembayaran: totalPembayaran, 
+          potongan_promo: dataPromoTerpakai ? dataPromoTerpakai.nominal : 0, 
+          total_pembayaran: finalTotalBayar, 
           status_pesanan: 'DIPROSES',
           metode_pembayaran: metodePembayaranDB,
           alamat_pengiriman: `${alamatInput.trim()} (Patokan: ${patokanInput.trim() || '-'})`,
-          
-          // 🚀 FIX: Menyimpan Koordinat Tujuan ke Database
           latitude_pengiriman: latitude,
           longitude_pengiriman: longitude
         })
@@ -274,6 +282,7 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
 
       if (orderError) throw orderError;
 
+      // 2. MASUKKAN ITEM PRODUK
       const orderItems = checkoutItems.map(item => ({
         pesanan_id: orderData.id, 
         produk_id: item.produk_id, 
@@ -282,20 +291,42 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
       }));
       await supabase.from('item_pesanan').insert(orderItems);
 
-      // 🔐 SISTEM ESCROW: Tahan/Potong Saldo Pembeli di Awal
-      if (metodePembayaran === 'SALDO') {
-        await supabase.from('users').update({ saldo: userSaldo - totalPembayaran }).eq('user_id', currentUserId);
+      // 3. JIKA ADA PROMO, CATAT KE BUKU SATPAM & UPDATE KUOTA
+      if (dataPromoTerpakai) {
+          const payloadRiwayat = {
+              user_id_pembeli: currentUserId,
+              kode_dipakai: dataPromoTerpakai.kode,
+              sumber_promo: dataPromoTerpakai.sumber,
+              id_transaksi: orderData.id,
+              layanan_transaksi: 'PAMILO_FOOD',
+              nominal_diskon_didapat: dataPromoTerpakai.nominal
+          };
+
+          const { error: errPromoLog } = await supabase.from('riwayat_pemakaian_promo').insert([payloadRiwayat]);
+          if (errPromoLog) console.error("Gagal mencatat log promo:", errPromoLog);
+
+          if (dataPromoTerpakai.sumber === 'PAMILO') {
+              const currentT = dataPromoTerpakai.dataAsli.kuota_terpakai || 0;
+              await supabase.from('promosi_pamilo')
+                  .update({ kuota_terpakai: currentT + 1 })
+                  .eq('id_promo', dataPromoTerpakai.dataAsli.id_promo);
+          }
       }
 
+      // 4. SISTEM ESCROW: Potong Saldo
+      if (metodePembayaran === 'SALDO') {
+        await supabase.from('users').update({ saldo: userSaldo - finalTotalBayar }).eq('user_id', currentUserId);
+      }
+
+      // 5. BERSIHKAN KERANJANG JIKA BUKAN BELI LANGSUNG
       if (mode !== 'beli_langsung') {
         await supabase.from('keranjang').delete().eq('pembeli_id', currentUserId);
       }
 
-      // Navigasi langsung ke nota tanpa Alert tambahan
       router.replace(`/orders/${orderData.id}` as any);
 
     } catch (error: any) {
-      console.error('[Checkout ❌] Gagal Insert Database:', error);
+      console.error('[Checkout ❌]', error);
       Alert.alert('Gagal Membayar', error.message || 'Terjadi kesalahan saat memproses pesanan.');
     } finally {
       setSubmitting(false);
@@ -310,6 +341,6 @@ export const useCheckout = (mode: string | null, produkIdLangsung: string | null
     isMapVisible, setIsMapVisible, bukaPeta, tempLat, tempLng, setTempLat, setTempLng,
     konfirmasiLokasiPeta, isTranslatingGps, latitude,
     searchQuery, setSearchQuery, searchResults, setSearchResults, isSearching, cariAlamatPeta, pilihHasilPencarian, 
-    executeOrderCheckout 
+    executeOrderCheckout, updateQuantity // 🚀 Ekspor fungsi updateQuantity
   };
 };

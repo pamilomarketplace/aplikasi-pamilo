@@ -15,10 +15,11 @@ export const useRegisterSeller = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  
   const [statusPendaftaran, setStatusPendaftaran] = useState<'BELUM' | 'MENUNGGU' | 'DITERIMA'>('BELUM');
 
   const [namaToko, setNamaToko] = useState('');
-  const [kategori, setKategori] = useState('Makanan & Minuman');
+  const [kategori, setKategori] = useState('Pamilo Food');
   const [whatsapp, setWhatsapp] = useState('');
   const [deskripsi, setDeskripsi] = useState('');
   const [jamOperasional, setJamOperasional] = useState('08:00 - 20:00');
@@ -32,7 +33,7 @@ export const useRegisterSeller = () => {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [isMapVisible, setIsMapVisible] = useState(false);
-  const [tempLat, setTempLat] = useState(-7.3274);
+  const [tempLat, setTempLat] = useState(-7.3274); // Default Ciamis
   const [tempLng, setTempLng] = useState(108.3532);
 
   useEffect(() => {
@@ -41,15 +42,17 @@ export const useRegisterSeller = () => {
       if (!authData?.user) return;
       setUserId(authData.user.id);
 
+      // Mengecek langsung ke tabel toko sesuai skema
       const { data: tokoData } = await supabase
         .from('toko')
         .select('is_verified')
         .eq('user_id_toko', authData.user.id)
-        .single();
+        .maybeSingle();
 
       if (tokoData) {
         setStatusPendaftaran(tokoData.is_verified ? 'DITERIMA' : 'MENUNGGU');
       }
+      
       setLoading(false);
     };
     checkStatus();
@@ -97,6 +100,7 @@ export const useRegisterSeller = () => {
       const fileName = `toko_${userId}_${Date.now()}.${fileExt}`;
       const filePath = `foto_toko/${fileName}`;
 
+      // Upload ke bucket berkas-mitra sesuai instruksi
       const { error: uploadError } = await supabase.storage
         .from('berkas-mitra')
         .upload(filePath, decode(fotoBase64), { contentType: 'image/jpeg' });
@@ -105,6 +109,9 @@ export const useRegisterSeller = () => {
 
       const { data: urlData } = supabase.storage.from('berkas-mitra').getPublicUrl(filePath);
       
+      // Insert langsung ke tabel toko sesuai skema yang diberikan
+      const alamatLengkap = `${detailJalan}, Desa ${desa}, Kec. ${kecamatan}, Ciamis`;
+      
       const { error: insertError } = await supabase.from('toko').insert({
         user_id_toko: userId,
         nama_toko: namaToko,
@@ -112,7 +119,7 @@ export const useRegisterSeller = () => {
         whatsapp_toko: whatsapp,
         deskripsi: deskripsi,
         jam_operasional: jamOperasional,
-        alamat_toko: `${detailJalan}, Desa ${desa}, Kec. ${kecamatan}, Ciamis`,
+        alamat_toko: alamatLengkap,
         kecamatan_toko: kecamatan,
         desa_toko: desa,
         detail_jalan_toko: detailJalan,
@@ -120,7 +127,8 @@ export const useRegisterSeller = () => {
         longitude_toko: longitude,
         foto_toko: urlData.publicUrl,
         is_verified: false,
-        status_toko: 'TUTUP'
+        status_toko: 'TUTUP',
+        kota_toko: 'Kabupaten Ciamis' // Mengikuti nilai default skema
       });
 
       if (insertError) throw insertError;

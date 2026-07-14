@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location'; 
 import { useMigo } from '@/features/migo/useMigo';
+import PromoCheckout from '@/components/PromoCheckout'; // 🚀 IMPORT KOMPONEN PROMO
 
 const { width, height } = Dimensions.get('window');
 
@@ -25,6 +26,24 @@ export default function MigoBookingScreen() {
   const mapRef = useRef<MapView | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const mapDraggedRef = useRef<boolean>(false);
+
+  // 🚀 STATE UNTUK MENAMPUNG DISKON PROMO
+  const [diskonPromo, setDiskonPromo] = useState<number>(0);
+  const [dataPromoTerpakai, setDataPromoTerpakai] = useState<any>(null);
+
+  // 🚀 KALKULASI TOTAL AKHIR SETELAH DISKON
+  const finalTotalFare = Math.max(0, totalFare - diskonPromo);
+
+  // 🚀 FUNGSI PENANGKAP HASIL VALIDASI VOUCHER
+  const tangkapHasilPromo = (hasilPromo: any) => {
+      if (hasilPromo) {
+          setDiskonPromo(hasilPromo.nominal);
+          setDataPromoTerpakai(hasilPromo);
+      } else {
+          setDiskonPromo(0);
+          setDataPromoTerpakai(null);
+      }
+  };
 
   useEffect(() => {
     if (forceMapCenter && mapRef.current && isMapReady) {
@@ -51,10 +70,11 @@ export default function MigoBookingScreen() {
        Alert.alert('Gagal', 'Tentukan lokasi jemput dan tujuan terlebih dahulu.');
        return;
     }
+    
+    // (Opsional) TODO: Modifikasi createMigoOrder di useMigo agar menerima dataPromoTerpakai dan finalTotalFare
     const hasil = await createMigoOrder();
+    
     if (hasil.success && hasil.orderId) {
-      // Memberi jeda 100 milidetik agar memori HP siap memuat Peta baru di layar Tracking 
-      // tanpa membekukan layar Booking
       setTimeout(() => {
         router.replace({ pathname: '/migo/tracking', params: { orderId: hasil.orderId } });
       }, 100);
@@ -99,14 +119,13 @@ export default function MigoBookingScreen() {
         <View style={styles.centerPinShadow} />
       </View>
 
-      <TouchableOpacity style={[styles.myLocationBtn, { bottom: isPanelOpen ? 320 : 40 }]} onPress={handleCurrentLocation}>
+      <TouchableOpacity style={[styles.myLocationBtn, { bottom: isPanelOpen ? 450 : 40 }]} onPress={handleCurrentLocation}>
         <Ionicons name="locate" size={24} color="#4A3420" />
       </TouchableOpacity>
 
       <View style={[styles.topPanel, { top: insets.top + 10 }]}>
         <Text style={styles.inputSectionLabel}>Alamat Penjemputan Warga</Text>
         
-        {/* PENGHAPUSAN BUG ELEVATION PADA VIEW */}
         <View style={[styles.inputWrapper, activeInput === 'pickup' && styles.activeInputLine]}>
           <Text style={styles.inputMarkerIcon}>🟢</Text>
           <TextInput
@@ -127,7 +146,6 @@ export default function MigoBookingScreen() {
 
         <Text style={[styles.inputSectionLabel, { marginTop: 12 }]}>Alamat Tujuan Antar</Text>
         
-        {/* PENGHAPUSAN BUG ELEVATION PADA VIEW */}
         <View style={[styles.inputWrapper, activeInput === 'destination' && styles.activeInputLine]}>
           <Text style={styles.inputMarkerIcon}>🔴</Text>
           <TextInput
@@ -146,7 +164,12 @@ export default function MigoBookingScreen() {
           )}
         </View>
 
-        
+        {searchingData && (
+          <View style={styles.loadingSuggestionsBox}>
+            <ActivityIndicator size="small" color="#E28743" />
+            <Text style={styles.loadingSuggestionsText}>Mencari lokasi di Ciamis...</Text>
+          </View>
+        )}
 
         {suggestions.length > 0 && (
           <View style={styles.suggestionsContainer}>
@@ -170,7 +193,17 @@ export default function MigoBookingScreen() {
       </View>
 
       {isPanelOpen && (
-        <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 15 }]}>
+        <ScrollView style={[styles.bottomPanel, { paddingBottom: insets.bottom + 15, maxHeight: height * 0.55 }]} showsVerticalScrollIndicator={false}>
+          
+          {/* 🚀 SISIPAN KOTAK PROMO KHUSUS MIGO */}
+          <PromoCheckout 
+             totalBelanja={totalFare} 
+             userIdPembeli="" // TODO: Ambil dari Auth Session
+             idToko={null} // null karena ini Migo (Bukan Toko)
+             layananSaatIni="MIGO" 
+             onPromoValid={tangkapHasilPromo}
+          />
+
           <Text style={styles.bottomSectionLabel}>Pilih Metode Pembayaran</Text>
           <View style={styles.paymentSelectorRow}>
             <TouchableOpacity style={[styles.paymentTab, paymentMethod === 'TUNAI' && styles.paymentTabActive]} onPress={() => setPaymentMethod('TUNAI')}>
@@ -193,17 +226,27 @@ export default function MigoBookingScreen() {
               <Text style={styles.invoiceLabelText}>Biaya Layanan Aplikasi</Text>
               <Text style={styles.invoiceValueText}>{formatRupiah(biayaLayanan)}</Text>
             </View>
+            
+            {/* 🚀 BARIS DISKON (Muncul jika ada diskon) */}
+            {diskonPromo > 0 && (
+              <View style={styles.invoiceRow}>
+                <Text style={[styles.invoiceLabelText, {color: '#27AE60'}]}><Ionicons name="pricetag" size={12}/> Diskon Voucher</Text>
+                <Text style={[styles.invoiceValueText, {color: '#27AE60'}]}>- {formatRupiah(diskonPromo)}</Text>
+              </View>
+            )}
+
             <View style={styles.invoiceDividerLine} />
             <View style={styles.invoiceRow}>
               <Text style={styles.totalLabelText}>Total Pembayaran</Text>
-              <Text style={styles.totalValueText}>{formatRupiah(totalFare)}</Text>
+              <Text style={styles.totalValueText}>{formatRupiah(finalTotalFare)}</Text>
             </View>
           </View>
 
           <TouchableOpacity style={[styles.orderButton, submitting && styles.orderButtonDisabled]} onPress={handleBookingSubmit} disabled={submitting}>
             {submitting ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.orderButtonText}>Pesan Sekarang</Text>}
           </TouchableOpacity>
-        </View>
+          <View style={{height: 30}}/>
+        </ScrollView>
       )}
     </View>
   );
@@ -219,10 +262,7 @@ const styles = StyleSheet.create({
   topPanel: { position: 'absolute', left: 20, right: 20, backgroundColor: '#FFF', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#E0D0C0', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 5, zIndex: 10 },
   inputSectionLabel: { fontSize: 11, fontWeight: 'bold', color: '#7A6450', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAF3F0', borderRadius: 10, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#FAF3F0' },
-  
-  // 🚀 FAKTA PENYELESAIAN: 'elevation: 2' DIHAPUS MUTLAK dari sini agar Keyboard tidak pernah terbunuh
   activeInputLine: { borderColor: '#E28743', backgroundColor: '#FFF' },
-  
   inputMarkerIcon: { fontSize: 13, marginRight: 8 }, 
   textInputBox: { flex: 1, fontSize: 13, color: '#4A3420', fontWeight: '500', paddingVertical: 0 },
   clearTextButton: { padding: 4, marginLeft: 5 },

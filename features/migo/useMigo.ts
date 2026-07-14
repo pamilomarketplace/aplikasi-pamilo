@@ -31,7 +31,7 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
   
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [tarifMurni, setTarifMurni] = useState<number>(0); 
-  const [totalFare, setTotalFare] = useState<number>(0); 
+  const [totalFare, setTotalFare] = useState<number>(0); // Total sebelum promo
   const [paymentMethod, setPaymentMethod] = useState<'TUNAI' | 'PAMILO_PAY'>('TUNAI');
 
   const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
@@ -79,7 +79,6 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.id) { if (isMounted) setLoading(false); return; }
 
-        // BERSIH: Panggil lewat Repository
         const data = await migoRepository.getDefaultAddress(user.id);
 
         if (isMounted && data) {
@@ -180,24 +179,78 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
     calculateRoute();
   }, [pickup, destination, serviceType, tarifPerKm, biayaLayanan]);
 
-  const createMigoOrder = async () => {
+  // 🚀 FUNGSI UTAMA DIPERBAIKI (Menerima parameter diskon dari Booking UI)
+  const createMigoOrder = async (dataPromoTerpakai: any = null, finalTotalBayar: number = totalFare) => {
     if (!pickup || !destination || distanceKm === 0) return { success: false, message: 'Harap tentukan rute perjalanan terlebih dahulu.' };
+    
     try {
       setSubmitting(true);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.id) throw new Error('Sesi pendaftaran Anda telah berakhir.');
 
-      // BERSIH: Pembuatan pesanan dipindah ke Repository
-      const orderId = await migoRepository.createOrder({
+      // 1. CEK SALDO JIKA PAKAI PAMILOPAY
+      if (paymentMethod === 'PAMILO_PAY') {
+          const { data: userData } = await supabase.from('users').select('saldo').eq('user_id', session.user.id).single();
+          if (!userData || userData.saldo < finalTotalBayar) {
+              throw new Error("Saldo Dompet PAMILO Anda tidak mencukupi untuk biaya perjalanan ini.");
+          }
+      }
+
+      // 2. PEMBUATAN PESANAN DENGAN BIAYA FINAL + PROMO
+      const payloadMigo = {
         pembeli_id: session.user.id,
         alamat_jemput: pickup.address, latitude_jemput: pickup.latitude, longitude_jemput: pickup.longitude,
         alamat_antar: destination.address, latitude_tujuan: destination.latitude, longitude_tujuan: destination.longitude,
-        jarak_km: distanceKm, total_pembayaran: totalFare, metode_pembayaran: paymentMethod,
-        tipe_layanan: serviceType === 'mobil' ? 'MIGO_CAR' : 'MIGO_RIDE', status_order: 'MENCARI_DRIVER', biaya_layanan: biayaLayanan 
-      });
+        jarak_km: distanceKm, 
+        
+        potongan_promo: dataPromoTerpakai ? dataPromoTerpakai.nominal : 0, // 🚀 MENYIMPAN POTONGAN
+        total_pembayaran: finalTotalBayar, // 🚀 MENGGUNAKAN HARGA DISKON
+        
+        metode_pembayaran: paymentMethod === 'PAMILO_PAY' ? 'SALDO_PAMILO' : 'TUNAI',
+        tipe_layanan: serviceType === 'mobil' ? 'MIGO_CAR' : 'MIGO_RIDE', 
+        status_order: 'MENCARI_DRIVER', 
+        biaya_layanan: biayaLayanan 
+      };
 
-      return { success: true, orderId };
-    } catch (err: any) { return { success: false, message: err.message }; } finally { setSubmitting(false); }
+      // Kita tidak pakai repository disini agar logic promo dan escrow mudah dibaca dalam 1 blok fungsi
+      const { data: orderMigo, error: errMigo } = await supabase.from('migo_orders').insert([payloadMigo]).select('id').single();
+      if (errMigo) throw errMigo;
+
+      // 3. JIKA ADA PROMO, CATAT KE BUKU SATPAM & UPDATE KUOTA
+      if (dataPromoTerpakai) {
+          const payloadRiwayat = {
+              user_id_pembeli: session.user.id,
+              kode_dipakai: dataPromoTerpakai.kode,
+              sumber_promo: dataPromoTerpakai.sumber,
+              id_transaksi: orderMigo.id,
+              layanan_transaksi: 'MIGO',
+              nominal_diskon_didapat: dataPromoTerpakai.nominal
+          };
+
+          const { error: errPromoLog } = await supabase.from('riwayat_pemakaian_promo').insert([payloadRiwayat]);
+          if (errPromoLog) console.error("Gagal mencatat log promo:", errPromoLog);
+
+          if (dataPromoTerpakai.sumber === 'PAMILO') {
+              const currentT = dataPromoTerpakai.dataAsli.kuota_terpakai || 0;
+              await supabase.from('promosi_pamilo').update({ kuota_terpakai: currentT + 1 }).eq('id_promo', dataPromoTerpakai.dataAsli.id_promo);
+          }
+      }
+
+      // 4. SISTEM ESCROW: Potong Saldo PamiloPay
+      if (paymentMethod === 'PAMILO_PAY') {
+          // Ambil saldo terbaru lagi untuk keamanan
+          const { data: latestUser } = await supabase.from('users').select('saldo').eq('user_id', session.user.id).single();
+          if (latestUser) {
+              await supabase.from('users').update({ saldo: latestUser.saldo - finalTotalBayar }).eq('user_id', session.user.id);
+          }
+      }
+
+      return { success: true, orderId: orderMigo.id };
+    } catch (err: any) { 
+      return { success: false, message: err.message }; 
+    } finally { 
+      setSubmitting(false); 
+    }
   };
 
   return {

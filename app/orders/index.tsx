@@ -21,6 +21,10 @@ export default function OrderHistoryScreen() {
       return { bg: '#ECEFF1', text: '#37474F', label: 'Dibatalkan' };
     };
     const statusMeta = getStatusColor(item.status_pesanan);
+    
+    // 🚀 ASUMSI: Di dalam type OrderHistoryItem nanti Anda tambahkan properti potongan_promo
+    // Karena saat ini mungkin belum ada di interface, kita bypass ke any sementara untuk UI
+    const isPakaiPromo = (item as any).potongan_promo && (item as any).potongan_promo > 0;
 
     return (
       <TouchableOpacity 
@@ -42,7 +46,16 @@ export default function OrderHistoryScreen() {
 
         <View style={styles.bodyDetailNota}>
           <Text style={styles.dateMetaText}>Waktu: {new Date(item.created_at).toLocaleDateString('id-ID')} - {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
-          <Text style={styles.priceTotalLabel}>Total Tagihan: <Text style={styles.priceOrange}>Rp {item.total_pembayaran.toLocaleString('id-ID')}</Text></Text>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+              <Text style={styles.priceTotalLabel}>Total Tagihan: <Text style={styles.priceOrange}>Rp {item.total_pembayaran.toLocaleString('id-ID')}</Text></Text>
+              {/* 🚀 INDIKATOR PROMO DI KARTU RIWAYAT */}
+              {isPakaiPromo && (
+                 <View style={styles.promoBadge}>
+                    <Ionicons name="pricetag" size={10} color="#27AE60"/>
+                    <Text style={styles.promoText}>Promo Terpakai</Text>
+                 </View>
+              )}
+          </View>
         </View>
 
         <View style={styles.btnOpenChatChannel}>
@@ -105,6 +118,8 @@ const styles = StyleSheet.create({
   dateMetaText: { fontSize: 11, color: '#7A6450' },
   priceTotalLabel: { fontSize: 12, color: '#4A3420' },
   priceOrange: { fontWeight: 'bold', color: '#E28743', fontSize: 13 },
+  promoBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F8F5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, gap: 4 },
+  promoText: { fontSize: 9, color: '#27AE60', fontWeight: 'bold' },
   btnOpenChatChannel: { backgroundColor: '#E28743', flexDirection: 'row', height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', gap: 6, elevation: 1 },
   textBtnChat: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
   emptyHistoryContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 45, marginTop: 170 },
