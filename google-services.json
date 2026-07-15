@@ -62,6 +62,35 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:608335628888:android:6acf7d89f9318a237ed82d",
+        "android_client_info": {
+          "package_name": "id.pamilo.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "608335628888-f1f1her3e67hmhk000hi2ito2bkb6ooe.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDleAwiEEqVhs4KVih1U47ukK0nZEPZiXM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "608335628888-f1f1her3e67hmhk000hi2ito2bkb6ooe.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
