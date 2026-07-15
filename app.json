@@ -31,8 +31,8 @@
       }
     },
     "android": {
-      "package": "com.pamilo.app",
-      "versionCode": 7,
+      "package": "id.pamilo.app",
+      "versionCode": 8,
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
