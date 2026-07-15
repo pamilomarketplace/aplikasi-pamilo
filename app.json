@@ -18,7 +18,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pamilo.app",
+      "bundleIdentifier": "id.pamilo.app",
       "associatedDomains": [
         "applinks:pamilo.store"
       ],
