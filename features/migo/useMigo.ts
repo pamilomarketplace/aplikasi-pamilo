@@ -23,6 +23,9 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
   const [pickupQuery, setPickupQuery] = useState<string>('');
   const [destinationQuery, setDestinationQuery] = useState<string>('');
   
+  // 🚀 STATE BUKU ALAMAT UNTUK MIGO
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [searchingData, setSearchingData] = useState<boolean>(false);
   
@@ -31,7 +34,7 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
   
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [tarifMurni, setTarifMurni] = useState<number>(0); 
-  const [totalFare, setTotalFare] = useState<number>(0); // Total sebelum promo
+  const [totalFare, setTotalFare] = useState<number>(0); 
   const [paymentMethod, setPaymentMethod] = useState<'TUNAI' | 'PAMILO_PAY'>('TUNAI');
 
   const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
@@ -57,8 +60,8 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
   useEffect(() => {
     const muatKonfigurasiAdmin = async () => {
       try {
-        const { data, error } = await supabase.from('pengaturan_aplikasi').select('kunci_konfigurasi, nilai_konfigurasi');
-        if (!error && data) {
+        const { data } = await supabase.from('pengaturan_aplikasi').select('kunci_konfigurasi, nilai_konfigurasi');
+        if (data) {
           const konfigLayanan = data.find(item => item.kunci_konfigurasi === 'BIAYA_LAYANAN_TRANSAKSI');
           if (konfigLayanan) setBiayaLayanan(Number(konfigLayanan.nilai_konfigurasi));
           const kunciTarif = serviceType === 'mobil' ? 'ONGKIR_MOBIL_PER_KM' : 'ONGKIR_PER_KM';
@@ -79,8 +82,11 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.id) { if (isMounted) setLoading(false); return; }
 
-        const data = await migoRepository.getDefaultAddress(user.id);
+        // 🚀 TARIK BUKU ALAMAT TERSIMPAN MILIK USER INI
+        const { data: addrData } = await supabase.from('user_addresses').select('*').eq('user_id', user.id);
+        if (isMounted && addrData) setSavedAddresses(addrData);
 
+        const data = await migoRepository.getDefaultAddress(user.id);
         if (isMounted && data) {
           const defaultLoc = { address: data.alamat_lengkap, latitude: Number(data.latitude), longitude: Number(data.longitude) };
           setPickup(defaultLoc);
@@ -100,6 +106,23 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
     return () => { isMounted = false; clearTimeout(safetyTimer); };
   }, [setActiveInput]);
 
+  // 🚀 FUNGSI PILIH ALAMAT DARI BUKU TERSIMPAN KHUSUS MIGO
+  const applySavedAddressMigo = useCallback((addr: any) => {
+    isUserInteractedRef.current = true;
+    const targetInput = activeInputRef.current;
+    const selectedLoc = { address: addr.alamat_lengkap, latitude: Number(addr.latitude), longitude: Number(addr.longitude) };
+
+    if (targetInput === 'pickup') {
+       setPickup(selectedLoc);
+       setPickupQuery(`${addr.label_alamat} - ${addr.alamat_lengkap}`);
+    } else {
+       setDestination(selectedLoc);
+       setDestinationQuery(`${addr.label_alamat} - ${addr.alamat_lengkap}`);
+    }
+    
+    setForceMapCenter({ lat: selectedLoc.latitude, lng: selectedLoc.longitude, timestamp: Date.now() });
+  }, []);
+
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     const targetInput = activeInputRef.current;
     try {
@@ -110,9 +133,7 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
       if (data.address) {
         const addr = data.address;
         const namaTempatSpesifik = addr.school || addr.cafe || addr.restaurant || addr.amenity || addr.shop || addr.mall || addr.supermarket || addr.hospital || addr.clinic || addr.hotel || addr.office || addr.government || addr.place_of_worship || addr.mosque || addr.church || addr.tourism || addr.historic || addr.building;
-        if (namaTempatSpesifik && !cleanAddress.startsWith(namaTempatSpesifik)) {
-          cleanAddress = `${namaTempatSpesifik}, ${cleanAddress}`;
-        }
+        if (namaTempatSpesifik && !cleanAddress.startsWith(namaTempatSpesifik)) cleanAddress = `${namaTempatSpesifik}, ${cleanAddress}`;
       }
 
       if (targetInput === 'pickup') { setPickup({ address: cleanAddress, latitude: lat, longitude: lng }); setPickupQuery(cleanAddress); } 
@@ -123,13 +144,9 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
   const searchAddress = useCallback((text: string, overrideType?: 'pickup' | 'destination') => {
     isUserInteractedRef.current = true;
     const targetInput = overrideType || activeInputRef.current;
-    
-    if (targetInput === 'pickup') setPickupQuery(text);
-    else setDestinationQuery(text);
-
+    if (targetInput === 'pickup') setPickupQuery(text); else setDestinationQuery(text);
     if (text.trim().length < 3) { setSuggestions([]); return; }
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         setSearchingData(true);
@@ -146,10 +163,8 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
   const selectSuggestion = useCallback((item: any, overrideType?: 'pickup' | 'destination') => {
     const targetInput = overrideType || activeInputRef.current;
     const selectedLoc = { address: item.display_name, latitude: parseFloat(item.lat), longitude: parseFloat(item.lon) };
-
     if (targetInput === 'pickup') { setPickup(selectedLoc); setPickupQuery(item.display_name); } 
     else { setDestination(selectedLoc); setDestinationQuery(item.display_name); }
-    
     setSuggestions([]); 
     setForceMapCenter({ lat: selectedLoc.latitude, lng: selectedLoc.longitude, timestamp: Date.now() });
     return selectedLoc; 
@@ -171,91 +186,56 @@ export const useMigo = (serviceType: 'motor' | 'mobil') => {
           const route = data.routes[0];
           const rawDistance = parseFloat((route.distance / 1000).toFixed(1));
           const coords = route.geometry.coordinates.map((point: number[]) => ({ latitude: point[1], longitude: point[0] }));
-          
-          setDistanceKm(rawDistance); setRouteCoordinates(coords); setTarifMurni(rawDistance * tarifPerKm); setTotalFare((rawDistance * tarifPerKm) + biayaLayanan); 
+          setDistanceKm(Math.max(1, rawDistance)); setRouteCoordinates(coords); setTarifMurni(Math.max(1, rawDistance) * tarifPerKm); setTotalFare((Math.max(1, rawDistance) * tarifPerKm) + biayaLayanan); 
         }
       } catch (err) {}
     };
     calculateRoute();
   }, [pickup, destination, serviceType, tarifPerKm, biayaLayanan]);
 
-  // 🚀 FUNGSI UTAMA DIPERBAIKI (Menerima parameter diskon dari Booking UI)
   const createMigoOrder = async (dataPromoTerpakai: any = null, finalTotalBayar: number = totalFare) => {
-    if (!pickup || !destination || distanceKm === 0) return { success: false, message: 'Harap tentukan rute perjalanan terlebih dahulu.' };
-    
-    try {
-      setSubmitting(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) throw new Error('Sesi pendaftaran Anda telah berakhir.');
-
-      // 1. CEK SALDO JIKA PAKAI PAMILOPAY
-      if (paymentMethod === 'PAMILO_PAY') {
-          const { data: userData } = await supabase.from('users').select('saldo').eq('user_id', session.user.id).single();
-          if (!userData || userData.saldo < finalTotalBayar) {
-              throw new Error("Saldo Dompet PAMILO Anda tidak mencukupi untuk biaya perjalanan ini.");
-          }
-      }
-
-      // 2. PEMBUATAN PESANAN DENGAN BIAYA FINAL + PROMO
-      const payloadMigo = {
-        pembeli_id: session.user.id,
-        alamat_jemput: pickup.address, latitude_jemput: pickup.latitude, longitude_jemput: pickup.longitude,
-        alamat_antar: destination.address, latitude_tujuan: destination.latitude, longitude_tujuan: destination.longitude,
-        jarak_km: distanceKm, 
-        
-        potongan_promo: dataPromoTerpakai ? dataPromoTerpakai.nominal : 0, // 🚀 MENYIMPAN POTONGAN
-        total_pembayaran: finalTotalBayar, // 🚀 MENGGUNAKAN HARGA DISKON
-        
-        metode_pembayaran: paymentMethod === 'PAMILO_PAY' ? 'SALDO_PAMILO' : 'TUNAI',
-        tipe_layanan: serviceType === 'mobil' ? 'MIGO_CAR' : 'MIGO_RIDE', 
-        status_order: 'MENCARI_DRIVER', 
-        biaya_layanan: biayaLayanan 
-      };
-
-      // Kita tidak pakai repository disini agar logic promo dan escrow mudah dibaca dalam 1 blok fungsi
-      const { data: orderMigo, error: errMigo } = await supabase.from('migo_orders').insert([payloadMigo]).select('id').single();
-      if (errMigo) throw errMigo;
-
-      // 3. JIKA ADA PROMO, CATAT KE BUKU SATPAM & UPDATE KUOTA
-      if (dataPromoTerpakai) {
-          const payloadRiwayat = {
-              user_id_pembeli: session.user.id,
-              kode_dipakai: dataPromoTerpakai.kode,
-              sumber_promo: dataPromoTerpakai.sumber,
-              id_transaksi: orderMigo.id,
-              layanan_transaksi: 'MIGO',
-              nominal_diskon_didapat: dataPromoTerpakai.nominal
-          };
-
-          const { error: errPromoLog } = await supabase.from('riwayat_pemakaian_promo').insert([payloadRiwayat]);
-          if (errPromoLog) console.error("Gagal mencatat log promo:", errPromoLog);
-
-          if (dataPromoTerpakai.sumber === 'PAMILO') {
-              const currentT = dataPromoTerpakai.dataAsli.kuota_terpakai || 0;
-              await supabase.from('promosi_pamilo').update({ kuota_terpakai: currentT + 1 }).eq('id_promo', dataPromoTerpakai.dataAsli.id_promo);
-          }
-      }
-
-      // 4. SISTEM ESCROW: Potong Saldo PamiloPay
-      if (paymentMethod === 'PAMILO_PAY') {
-          // Ambil saldo terbaru lagi untuk keamanan
-          const { data: latestUser } = await supabase.from('users').select('saldo').eq('user_id', session.user.id).single();
-          if (latestUser) {
-              await supabase.from('users').update({ saldo: latestUser.saldo - finalTotalBayar }).eq('user_id', session.user.id);
-          }
-      }
-
-      return { success: true, orderId: orderMigo.id };
-    } catch (err: any) { 
-      return { success: false, message: err.message }; 
-    } finally { 
-      setSubmitting(false); 
-    }
+      if (!pickup || !destination || distanceKm === 0) return { success: false, message: 'Harap tentukan rute terlebih dahulu.' };
+      try {
+        setSubmitting(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user?.id) throw new Error('Sesi pendaftaran Anda telah berakhir.');
+  
+        if (paymentMethod === 'PAMILO_PAY') {
+            const { data: userData } = await supabase.from('users').select('saldo').eq('user_id', session.user.id).single();
+            if (!userData || userData.saldo < finalTotalBayar) throw new Error("Saldo Dompet PAMILO Anda tidak mencukupi untuk biaya perjalanan ini.");
+        }
+  
+        const payloadMigo = {
+          pembeli_id: session.user.id,
+          alamat_jemput: pickup.address, latitude_jemput: pickup.latitude, longitude_jemput: pickup.longitude,
+          alamat_antar: destination.address, latitude_tujuan: destination.latitude, longitude_tujuan: destination.longitude,
+          jarak_km: distanceKm, potongan_promo: dataPromoTerpakai ? dataPromoTerpakai.nominal : 0, 
+          total_pembayaran: finalTotalBayar, metode_pembayaran: paymentMethod === 'PAMILO_PAY' ? 'SALDO_PAMILO' : 'TUNAI',
+          tipe_layanan: serviceType === 'mobil' ? 'MIGO_CAR' : 'MIGO_RIDE', status_order: 'MENCARI_DRIVER', biaya_layanan: biayaLayanan 
+        };
+  
+        const { data: orderMigo, error: errMigo } = await supabase.from('migo_orders').insert([payloadMigo]).select('id').single();
+        if (errMigo) throw errMigo;
+  
+        if (dataPromoTerpakai) {
+            await supabase.from('riwayat_pemakaian_promo').insert([{ user_id_pembeli: session.user.id, kode_dipakai: dataPromoTerpakai.kode, sumber_promo: dataPromoTerpakai.sumber, id_transaksi: orderMigo.id, layanan_transaksi: 'MIGO', nominal_diskon_didapat: dataPromoTerpakai.nominal }]);
+            if (dataPromoTerpakai.sumber === 'PAMILO') {
+                await supabase.from('promosi_pamilo').update({ kuota_terpakai: (dataPromoTerpakai.dataAsli.kuota_terpakai || 0) + 1 }).eq('id_promo', dataPromoTerpakai.dataAsli.id_promo);
+            }
+        }
+  
+        if (paymentMethod === 'PAMILO_PAY') {
+            const { data: latestUser } = await supabase.from('users').select('saldo').eq('user_id', session.user.id).single();
+            if (latestUser) await supabase.from('users').update({ saldo: latestUser.saldo - finalTotalBayar }).eq('user_id', session.user.id);
+        }
+        return { success: true, orderId: orderMigo.id };
+      } catch (err: any) { return { success: false, message: err.message }; } finally { setSubmitting(false); }
   };
 
   return {
     loading, submitting, activeInput, setActiveInput, pickup, destination, pickupQuery, destinationQuery, suggestions, searchingData,
     distanceKm, tarifMurni, biayaLayanan, totalFare, paymentMethod, setPaymentMethod, routeCoordinates, forceMapCenter,
-    reverseGeocode, searchAddress, selectSuggestion, clearInput, createMigoOrder
+    reverseGeocode, searchAddress, selectSuggestion, clearInput, createMigoOrder,
+    savedAddresses, applySavedAddressMigo // 🚀 EKSPOR BUKU ALAMAT MIGO
   };
 };

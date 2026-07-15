@@ -25,18 +25,31 @@ export default function SellerDashboardScreen() {
     <View style={styles.headerContainer}>
       <Text style={styles.screenTitle}>Manajemen Lapak Toko</Text>
       
-      {/* 🚀 TOMBOL JALAN MASUK KE RADAR TOKO (DAPUR) */}
-      <TouchableOpacity style={styles.radarBtnCard} onPress={() => router.push('/seller/orders' as any)}>
-        <View style={styles.radarIconBox}>
-          {/* 🚀 FIX: Mengganti radar-outline menjadi restaurant-outline yang valid di Ionicons */}
-          <Ionicons name="restaurant-outline" size={28} color="#FFF" />
-        </View>
-        <View style={styles.radarTextCol}>
-          <Text style={styles.radarTitle}>Dapur / Radar Toko</Text>
-          <Text style={styles.radarSub}>Pantau & kelola pesanan masuk di sini.</Text>
-        </View>
-        <Ionicons name="chevron-forward-circle" size={26} color="#2ECC71" />
-      </TouchableOpacity>
+      {/* 🚀 BARISAN TOMBOL MENU UTAMA SELLER */}
+      <View style={styles.topMenuRow}>
+        <TouchableOpacity style={styles.radarBtnCard} onPress={() => router.push('/seller/orders' as any)}>
+          <View style={styles.radarIconBox}>
+            <Ionicons name="restaurant-outline" size={24} color="#FFF" />
+          </View>
+          <View style={styles.radarTextCol}>
+            <Text style={styles.radarTitle}>Dapur / Radar Toko</Text>
+            <Text style={styles.radarSub}>Pantau & kelola pesanan.</Text>
+          </View>
+          <Ionicons name="chevron-forward-circle" size={22} color="#2ECC71" />
+        </TouchableOpacity>
+
+        {/* 🚀 TOMBOL JALAN MASUK KE KELOLA PROMO TOKO */}
+        <TouchableOpacity style={styles.promoBtnCard} onPress={() => router.push('/seller/kelola-promo' as any)}>
+          <View style={styles.promoIconBox}>
+            <Ionicons name="pricetags-outline" size={24} color="#FFF" />
+          </View>
+          <View style={styles.radarTextCol}>
+            <Text style={styles.radarTitle}>Kelola Promo & Diskon</Text>
+            <Text style={styles.radarSub}>Kupon & Diskon Harga.</Text>
+          </View>
+          <Ionicons name="chevron-forward-circle" size={22} color="#E28743" />
+        </TouchableOpacity>
+      </View>
 
       {/* SEKTOR FORM INPUT PRODUK PREMIUM HIBRIDA */}
       <View style={[styles.formCard, editingProductId ? styles.formCardEditMode : null]}>
@@ -44,7 +57,7 @@ export default function SellerDashboardScreen() {
           {editingProductId ? '📝 Perbarui Menu / Produk Anda' : '➕ Pasang Menu / Produk Baru'}
         </Text>
         
-        {/* 🌟 WIDGET SELECTOR GAMBER DARI GALERI NATIF */}
+        {/* 🌟 WIDGET SELECTOR GAMBAR DARI GALERI NATIF */}
         <View style={styles.imagePickerSectionRow}>
           <TouchableOpacity 
             style={styles.imageSelectorSquareContainer}
@@ -204,13 +217,13 @@ export default function SellerDashboardScreen() {
                 {item.deskripsi || 'Belum ada deskripsi singkat menu.'}
               </Text>
 
-              {/* Tag Varian Ciamik jika tersedia di baris data */}
               {item.varian ? (
                 <View style={styles.variantCapsuleRow}>
                   <Text style={styles.textVariantCapsule}>🎨 Varian: {item.varian}</Text>
                 </View>
               ) : null}
               
+              {/* 🚀 INDIKASI HARGA NORMAL (Jika tidak ada fitur coret harga, biarkan seperti ini dulu) */}
               <Text style={styles.itemPriceText}>{formatRupiah(item.harga)}</Text>
             </View>
 
@@ -248,11 +261,15 @@ const styles = StyleSheet.create({
   headerContainer: { marginBottom: 10 },
   screenTitle: { fontSize: 20, fontWeight: 'bold', color: '#4A3420', marginBottom: 15 },
   
-  radarBtnCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#2ECC71', marginBottom: 16, elevation: 2 },
-  radarIconBox: { backgroundColor: '#2ECC71', width: 46, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+  topMenuRow: { flexDirection: 'column', gap: 10, marginBottom: 16 },
+  radarBtnCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#2ECC71', elevation: 2 },
+  radarIconBox: { backgroundColor: '#2ECC71', width: 42, height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  promoBtnCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#F39C12', elevation: 2 },
+  promoIconBox: { backgroundColor: '#F39C12', width: 42, height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  
   radarTextCol: { flex: 1 },
-  radarTitle: { fontSize: 15, fontWeight: 'bold', color: '#2C3E50' },
-  radarSub: { fontSize: 11, color: '#7F8C8D', marginTop: 2 },
+  radarTitle: { fontSize: 14, fontWeight: 'bold', color: '#2C3E50' },
+  radarSub: { fontSize: 10, color: '#7F8C8D', marginTop: 2 },
 
   formCard: { backgroundColor: '#FFF', padding: 15, borderRadius: 14, borderWidth: 1, borderColor: '#E0D0C0', elevation: 1 },
   formCardEditMode: { borderColor: '#F5B041', borderWidth: 1.5 },

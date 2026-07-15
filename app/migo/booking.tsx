@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location'; 
 import { useMigo } from '@/features/migo/useMigo';
-import PromoCheckout from '@/components/PromoCheckout'; // 🚀 IMPORT KOMPONEN PROMO
+import PromoCheckout from '@/components/PromoCheckout'; 
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,29 +20,22 @@ export default function MigoBookingScreen() {
   const {
     loading, submitting, activeInput, setActiveInput, pickup, destination, pickupQuery, destinationQuery, suggestions, searchingData,
     distanceKm, tarifMurni, biayaLayanan, totalFare, paymentMethod, setPaymentMethod,
-    forceMapCenter, reverseGeocode, searchAddress, selectSuggestion, clearInput, createMigoOrder
+    forceMapCenter, reverseGeocode, searchAddress, selectSuggestion, clearInput, createMigoOrder,
+    savedAddresses, applySavedAddressMigo // 🚀 IMPORT FUNGSI BUKU ALAMAT
   } = useMigo(finalServiceType);
 
   const mapRef = useRef<MapView | null>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const mapDraggedRef = useRef<boolean>(false);
 
-  // 🚀 STATE UNTUK MENAMPUNG DISKON PROMO
   const [diskonPromo, setDiskonPromo] = useState<number>(0);
   const [dataPromoTerpakai, setDataPromoTerpakai] = useState<any>(null);
 
-  // 🚀 KALKULASI TOTAL AKHIR SETELAH DISKON
   const finalTotalFare = Math.max(0, totalFare - diskonPromo);
 
-  // 🚀 FUNGSI PENANGKAP HASIL VALIDASI VOUCHER
   const tangkapHasilPromo = (hasilPromo: any) => {
-      if (hasilPromo) {
-          setDiskonPromo(hasilPromo.nominal);
-          setDataPromoTerpakai(hasilPromo);
-      } else {
-          setDiskonPromo(0);
-          setDataPromoTerpakai(null);
-      }
+      if (hasilPromo) { setDiskonPromo(hasilPromo.nominal); setDataPromoTerpakai(hasilPromo); } 
+      else { setDiskonPromo(0); setDataPromoTerpakai(null); }
   };
 
   useEffect(() => {
@@ -55,10 +48,9 @@ export default function MigoBookingScreen() {
   const handleCurrentLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('Izin Ditolak', 'Mohon izinkan akses lokasi GPS HP Anda.'); return; }
+      if (status !== 'granted') return Alert.alert('Izin Ditolak', 'Mohon izinkan akses lokasi GPS HP Anda.');
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = loc.coords;
-      
       mapDraggedRef.current = false; 
       mapRef.current?.animateToRegion({ latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }, 600);
       reverseGeocode(latitude, longitude); 
@@ -66,21 +58,11 @@ export default function MigoBookingScreen() {
   };
 
   const handleBookingSubmit = async () => {
-    if (!pickup || !destination) {
-       Alert.alert('Gagal', 'Tentukan lokasi jemput dan tujuan terlebih dahulu.');
-       return;
-    }
-    
-    // (Opsional) TODO: Modifikasi createMigoOrder di useMigo agar menerima dataPromoTerpakai dan finalTotalFare
-    const hasil = await createMigoOrder();
-    
+    if (!pickup || !destination) return Alert.alert('Gagal', 'Tentukan lokasi jemput dan tujuan terlebih dahulu.');
+    const hasil = await createMigoOrder(dataPromoTerpakai, finalTotalFare);
     if (hasil.success && hasil.orderId) {
-      setTimeout(() => {
-        router.replace({ pathname: '/migo/tracking', params: { orderId: hasil.orderId } });
-      }, 100);
-    } else {
-      Alert.alert('Gagal Memesan ❌', hasil.message || 'Gagal memproses pesanan.');
-    }
+      setTimeout(() => { router.replace({ pathname: '/migo/tracking', params: { orderId: hasil.orderId } }); }, 100);
+    } else { Alert.alert('Gagal Memesan ❌', hasil.message || 'Gagal memproses pesanan.'); }
   };
 
   const formatRupiah = (angka: number) => `Rp ${Number(angka).toLocaleString('id-ID')}`;
@@ -96,11 +78,7 @@ export default function MigoBookingScreen() {
         showsUserLocation={true} 
         showsMyLocationButton={false} 
         onMapReady={() => setIsMapReady(true)}
-        
-        onPanDrag={() => {
-          mapDraggedRef.current = true;
-        }}
-
+        onPanDrag={() => { mapDraggedRef.current = true; }}
         onRegionChangeComplete={(region, details) => {
           if (mapDraggedRef.current && details?.isGesture) {
              reverseGeocode(region.latitude, region.longitude);
@@ -109,7 +87,6 @@ export default function MigoBookingScreen() {
         }}
       >
         <UrlTile urlTemplate="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" maximumZ={19} flipY={false} />
-        
         {pickup && <Marker coordinate={{ latitude: pickup.latitude, longitude: pickup.longitude }} title="Titik Jemput Warga" pinColor="#4CAF50" />}
         {destination && <Marker coordinate={{ latitude: destination.latitude, longitude: destination.longitude }} title="Titik Tujuan Antar" pinColor="#F44336" />}
       </MapView>
@@ -124,8 +101,23 @@ export default function MigoBookingScreen() {
       </TouchableOpacity>
 
       <View style={[styles.topPanel, { top: insets.top + 10 }]}>
-        <Text style={styles.inputSectionLabel}>Alamat Penjemputan Warga</Text>
         
+        {/* 🚀 WIDGET BUKU ALAMAT TERSIMPAN MIGO */}
+        {savedAddresses.length > 0 && (
+          <View style={{marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#FAF3F0'}}>
+             <Text style={{fontSize: 9, color: '#A1887F', fontWeight: 'bold', marginBottom: 6}}>PILIH ALAMAT CEPAT (Mengisi Kolom Aktif):</Text>
+             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {savedAddresses.map(addr => (
+                   <TouchableOpacity key={addr.id} style={styles.savedAddressChip} onPress={() => applySavedAddressMigo(addr)}>
+                      <Ionicons name={addr.label_alamat.toLowerCase().includes('rumah') ? 'home' : 'business'} size={14} color="#D35400" />
+                      <Text style={styles.savedAddressText}>{addr.label_alamat}</Text>
+                   </TouchableOpacity>
+                ))}
+             </ScrollView>
+          </View>
+        )}
+
+        <Text style={styles.inputSectionLabel}>Alamat Penjemputan Warga</Text>
         <View style={[styles.inputWrapper, activeInput === 'pickup' && styles.activeInputLine]}>
           <Text style={styles.inputMarkerIcon}>🟢</Text>
           <TextInput
@@ -134,10 +126,7 @@ export default function MigoBookingScreen() {
             placeholderTextColor="#A1887F"
             value={pickupQuery} 
             onChangeText={(text) => searchAddress(text, 'pickup')} 
-            onFocus={() => {
-              setActiveInput('pickup');
-              mapDraggedRef.current = false; 
-            }}
+            onFocus={() => { setActiveInput('pickup'); mapDraggedRef.current = false; }}
           />
           {pickupQuery.length > 0 && (
             <TouchableOpacity onPress={() => clearInput('pickup')} style={styles.clearTextButton}><Text style={styles.clearTextIcon}>✕</Text></TouchableOpacity>
@@ -145,7 +134,6 @@ export default function MigoBookingScreen() {
         </View>
 
         <Text style={[styles.inputSectionLabel, { marginTop: 12 }]}>Alamat Tujuan Antar</Text>
-        
         <View style={[styles.inputWrapper, activeInput === 'destination' && styles.activeInputLine]}>
           <Text style={styles.inputMarkerIcon}>🔴</Text>
           <TextInput
@@ -154,10 +142,7 @@ export default function MigoBookingScreen() {
             placeholderTextColor="#A1887F"
             value={destinationQuery} 
             onChangeText={(text) => searchAddress(text, 'destination')} 
-            onFocus={() => { 
-              setActiveInput('destination'); 
-              mapDraggedRef.current = false; 
-            }}
+            onFocus={() => { setActiveInput('destination'); mapDraggedRef.current = false; }}
           />
           {destinationQuery.length > 0 && (
             <TouchableOpacity onPress={() => clearInput('destination')} style={styles.clearTextButton}><Text style={styles.clearTextIcon}>✕</Text></TouchableOpacity>
@@ -178,10 +163,7 @@ export default function MigoBookingScreen() {
                 <TouchableOpacity 
                   key={index} 
                   style={[styles.suggestionItem, index < suggestions.length - 1 && styles.suggestionDivider]} 
-                  onPress={() => {
-                    Keyboard.dismiss(); 
-                    selectSuggestion(item, activeInput);
-                  }}
+                  onPress={() => { Keyboard.dismiss(); selectSuggestion(item, activeInput); }}
                 >
                   <Text style={styles.suggestionItemIcon}>📍</Text>
                   <Text style={styles.suggestionItemText} numberOfLines={2}>{item.display_name}</Text>
@@ -195,11 +177,11 @@ export default function MigoBookingScreen() {
       {isPanelOpen && (
         <ScrollView style={[styles.bottomPanel, { paddingBottom: insets.bottom + 15, maxHeight: height * 0.55 }]} showsVerticalScrollIndicator={false}>
           
-          {/* 🚀 SISIPAN KOTAK PROMO KHUSUS MIGO */}
           <PromoCheckout 
+             key={distanceKm.toString()}
              totalBelanja={totalFare} 
-             userIdPembeli="" // TODO: Ambil dari Auth Session
-             idToko={null} // null karena ini Migo (Bukan Toko)
+             userIdPembeli="" 
+             idToko={null}
              layananSaatIni="MIGO" 
              onPromoValid={tangkapHasilPromo}
           />
@@ -227,7 +209,6 @@ export default function MigoBookingScreen() {
               <Text style={styles.invoiceValueText}>{formatRupiah(biayaLayanan)}</Text>
             </View>
             
-            {/* 🚀 BARIS DISKON (Muncul jika ada diskon) */}
             {diskonPromo > 0 && (
               <View style={styles.invoiceRow}>
                 <Text style={[styles.invoiceLabelText, {color: '#27AE60'}]}><Ionicons name="pricetag" size={12}/> Diskon Voucher</Text>
@@ -260,6 +241,11 @@ const styles = StyleSheet.create({
   centerPinShadow: { width: 8, height: 8, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 4, marginTop: -2 },
   myLocationBtn: { position: 'absolute', right: 20, backgroundColor: '#FFF', width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, zIndex: 10 },
   topPanel: { position: 'absolute', left: 20, right: 20, backgroundColor: '#FFF', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#E0D0C0', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 5, zIndex: 10 },
+  
+  // 🚀 STYLE BUKU ALAMAT CHIPS MIGO
+  savedAddressChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3E0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 8, borderWidth: 1, borderColor: '#FFE0B2', gap: 6 },
+  savedAddressText: { fontSize: 10, fontWeight: 'bold', color: '#D35400' },
+
   inputSectionLabel: { fontSize: 11, fontWeight: 'bold', color: '#7A6450', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAF3F0', borderRadius: 10, paddingHorizontal: 12, height: 44, borderWidth: 1, borderColor: '#FAF3F0' },
   activeInputLine: { borderColor: '#E28743', backgroundColor: '#FFF' },
