@@ -32,7 +32,7 @@
     },
     "android": {
       "package": "com.pamilo.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
@@ -117,9 +117,7 @@
       },
       "router": {}
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1",
     "owner": "agieldoank"
   }
 }
